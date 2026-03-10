@@ -362,6 +362,7 @@ docs/                     Additional design documents
 ## Compatibility and stack
 
 - MCP Protocol: `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`
+- Advertised MCP capabilities: `tools`, `prompts`, `resources`
 - Transport: Streamable HTTP, Legacy SSE
 - Auth: Bearer Token, OAuth 2.0 PKCE
 - Runtime: Node.js 20+
@@ -388,6 +389,6 @@ Engram Codex is less a server that stores memory and more a system that keeps me
 ---
 
 <p align="center">
-  Made by <a href="mailto:jinho.von.choi@nerdvana.kr">Jinho Choi</a> &nbsp;|&nbsp;
+  Made by <a href="https://github.com/jinhyuk9714">Jinho Choi</a> &nbsp;|&nbsp;
   <a href="https://buymeacoffee.com/jinho.von.choi">Buy me a coffee</a>
 </p>

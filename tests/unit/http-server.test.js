@@ -1,5 +1,6 @@
 import { afterEach, describe, test } from "node:test";
 import assert from "node:assert/strict";
+import net from "node:net";
 import { once } from "node:events";
 
 function createJsonRpcResult(id, result) {
@@ -12,6 +13,21 @@ function createJsonRpcResult(id, result) {
 
 async function readJson(response) {
   return JSON.parse(await response.text());
+}
+
+async function makeRawHttp10Request({ hostname, port, path }) {
+  return await new Promise((resolve, reject) => {
+    const socket = net.createConnection({ host: hostname, port }, () => {
+      socket.write(`GET ${path} HTTP/1.0\r\n\r\n`);
+    });
+    let raw = "";
+    socket.setEncoding("utf8");
+    socket.on("data", (chunk) => {
+      raw += chunk;
+    });
+    socket.on("end", () => resolve(raw));
+    socket.on("error", reject);
+  });
 }
 
 function createServerOptions(overrides = {}) {
@@ -236,5 +252,30 @@ describe("HTTP server black-box behavior", () => {
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-type") || "", /^text\/plain/);
     assert.match(body, /# HELP test 1/);
+  });
+
+  test("OAuth metadata fallback does not expose a legacy nerdvana host when Host is missing", async () => {
+    const { server, baseUrl } = await startServer({
+      config: { port: 57332 },
+      deps: {
+        getAuthServerMetadata: (baseUrl) => ({ issuer: baseUrl })
+      }
+    });
+    servers.push(server);
+    const url = new URL("/.well-known/oauth-authorization-server", baseUrl);
+
+    const rawResponse = await makeRawHttp10Request({
+      hostname: url.hostname,
+      port: Number(url.port),
+      path: url.pathname
+    });
+    const [statusLine, ...rest] = rawResponse.split("\r\n");
+    const [, body = ""] = rawResponse.split("\r\n\r\n");
+    const payload = JSON.parse(body);
+
+    assert.match(statusLine, /^HTTP\/1\.1 200 OK$/);
+    assert.ok(rest.some((line) => /^Content-Type:/i.test(line)));
+    assert.equal(payload.issuer, "https://localhost:57332");
+    assert.doesNotMatch(payload.issuer, /nerdvana/i);
   });
 });

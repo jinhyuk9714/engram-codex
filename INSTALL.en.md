@@ -172,7 +172,7 @@ The server's `instructions` field nudges Codex toward `context`, `recall`, and `
 
 | Version | Notable Additions |
 |---------|------------------|
-| `2025-11-25` | Tasks abstraction, long-running operation support |
+| `2025-11-25` | Latest negotiated revision; current `initialize` advertises tools, prompts, and resources |
 | `2025-06-18` | Structured tool output, server-driven interaction |
 | `2025-03-26` | OAuth 2.1, Streamable HTTP transport |
 | `2024-11-05` | Initial release; Legacy SSE transport |

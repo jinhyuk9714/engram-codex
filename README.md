@@ -362,6 +362,7 @@ docs/                     추가 설계 문서
 ## 호환성 및 스택
 
 - MCP Protocol: `2025-11-25`, `2025-06-18`, `2025-03-26`, `2024-11-05`
+- Advertised MCP capabilities: `tools`, `prompts`, `resources`
 - Transport: Streamable HTTP, Legacy SSE
 - Auth: Bearer Token, OAuth 2.0 PKCE
 - Runtime: Node.js 20+
@@ -388,6 +389,6 @@ Engram Codex는 “기억을 저장하는 서버”보다 **기억을 검색 가
 ---
 
 <p align="center">
-  Made by <a href="mailto:jinho.von.choi@nerdvana.kr">Jinho Choi</a> &nbsp;|&nbsp;
+  Made by <a href="https://github.com/jinhyuk9714">Jinho Choi</a> &nbsp;|&nbsp;
   <a href="https://buymeacoffee.com/jinho.von.choi">Buy me a coffee</a>
 </p>
