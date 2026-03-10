@@ -16,12 +16,30 @@ const DOC_PATHS = [
   "INSTALL.en.md"
 ];
 
-const DISALLOWED_PATTERNS = [
+const CODE_TEXT_PATHS = [
+  "lib/auth.js",
+  "lib/gemini.js",
+  "lib/memory/NLIClassifier.js",
+  "lib/memory/normalize-vectors.js",
+  "lib/memory/memory-schema.sql",
+  "tests/unit/http-server.test.js"
+];
+
+const DOC_DISALLOWED_PATTERNS = [
   /\bMemento\b/g,
   /nerdvana\.kr/g,
   /pmcp\.nerdvana\.kr/g,
   /Tasks abstraction/g,
   /long-running operation support/g
+];
+
+const CODE_DISALLOWED_PATTERNS = [
+  /\bMemento\b/g,
+  /\bnerdvana MCP\b/g,
+  /\bnerdvana-nli-service\b/g,
+  /psql -U nerdvana -d nerdvana_mcp/g,
+  /legacy nerdvana\.vector cast should be removed/g,
+  /OAuth metadata fallback does not expose a legacy nerdvana host when Host is missing/g
 ];
 
 describe("protocol surface alignment docs", () => {
@@ -30,7 +48,22 @@ describe("protocol surface alignment docs", () => {
       const fullPath = path.join(ROOT_DIR, relativePath);
       const source = fs.readFileSync(fullPath, "utf8");
 
-      for (const pattern of DISALLOWED_PATTERNS) {
+      for (const pattern of DOC_DISALLOWED_PATTERNS) {
+        assert.doesNotMatch(
+          source,
+          pattern,
+          `${relativePath} should not contain ${pattern}`
+        );
+      }
+    }
+  });
+
+  test("internal comments and test descriptions avoid legacy branding outside compatibility exceptions", () => {
+    for (const relativePath of CODE_TEXT_PATHS) {
+      const fullPath = path.join(ROOT_DIR, relativePath);
+      const source = fs.readFileSync(fullPath, "utf8");
+
+      for (const pattern of CODE_DISALLOWED_PATTERNS) {
         assert.doesNotMatch(
           source,
           pattern,

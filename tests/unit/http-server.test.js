@@ -254,7 +254,7 @@ describe("HTTP server black-box behavior", () => {
     assert.match(body, /# HELP test 1/);
   });
 
-  test("OAuth metadata fallback does not expose a legacy nerdvana host when Host is missing", async () => {
+  test("OAuth metadata fallback uses a neutral localhost host when Host is missing", async () => {
     const { server, baseUrl } = await startServer({
       config: { port: 57332 },
       deps: {
