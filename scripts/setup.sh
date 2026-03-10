@@ -27,13 +27,6 @@ require_command() {
   fi
 }
 
-run_sql_migration() {
-  local file="$1"
-  info "Applying $(basename "$file")..."
-  psql "$DATABASE_URL" -f "$file"
-  success "$(basename "$file") done."
-}
-
 ask() {
   local prompt="$1" default="${2:-}" var
   if [[ -n "$default" ]]; then
@@ -68,7 +61,6 @@ echo
 info "Preflight checks"
 require_command node "Install Node.js 20+ first."
 require_command npm "Install npm before running setup."
-require_command python3 "python3 is used to safely encode DATABASE_URL credentials."
 
 NODE_MAJOR=$(node -p "process.versions.node.split('.')[0]")
 if (( NODE_MAJOR < 20 )); then
@@ -76,14 +68,6 @@ if (( NODE_MAJOR < 20 )); then
   exit 1
 fi
 success "Node.js $(node -v) detected"
-
-HAS_PSQL="false"
-if command_exists psql; then
-  HAS_PSQL="true"
-  success "psql detected"
-else
-  warn "psql not found. Schema and migration steps can be skipped now and run later."
-fi
 
 echo
 
@@ -106,7 +90,7 @@ echo
 info "Server"
 PORT=$(ask "Port" "57332")
 SESSION_TTL=$(ask "Session TTL (minutes)" "60")
-LOG_DIR=$(ask "Log directory" "/var/log/mcp")
+LOG_DIR=$(ask "Log directory" "tmp/logs")
 MEMENTO_ACCESS_KEY=$(ask_secret "Access key (MEMENTO_ACCESS_KEY, leave blank to disable auth)")
 
 echo
@@ -120,13 +104,13 @@ PG_USER=$(ask "User")
 PG_PASSWORD=$(ask_secret "Password")
 DB_MAX_CONNECTIONS=$(ask "Max connections" "20")
 
-DATABASE_URL="postgresql://${PG_USER}:$(python3 -c "import urllib.parse,sys; print(urllib.parse.quote(sys.argv[1]))" "$PG_PASSWORD")@${PG_HOST}:${PG_PORT}/${PG_DB}"
+DATABASE_URL="postgresql://${PG_USER}:$(node -e 'console.log(encodeURIComponent(process.argv[1]))' "$PG_PASSWORD")@${PG_HOST}:${PG_PORT}/${PG_DB}"
 
 echo
 
 # Redis
 info "Redis"
-if ask_yn "Enable Redis?" "y"; then
+if ask_yn "Enable Redis?" "n"; then
   REDIS_ENABLED="true"
   REDIS_HOST=$(ask "Host" "localhost")
   REDIS_PORT=$(ask "Port" "6379")
@@ -141,12 +125,12 @@ echo
 
 # Embedding provider
 info "Embedding Provider"
-echo "  1) openai   (text-embedding-3-small, 1536 dims)"
-echo "  2) gemini   (gemini-embedding-001, 3072 dims)"
-echo "  3) ollama   (local, nomic-embed-text)"
-echo "  4) localai  (local OpenAI-compatible)"
-echo "  5) custom   (manual configuration)"
-echo "  6) none     (disable semantic search)"
+echo "  1) none     (disable semantic search)"
+echo "  2) openai   (text-embedding-3-small, 1536 dims)"
+echo "  3) gemini   (gemini-embedding-001, 3072 dims)"
+echo "  4) ollama   (local, nomic-embed-text)"
+echo "  5) localai  (local OpenAI-compatible)"
+echo "  6) custom   (manual configuration)"
 EMBED_CHOICE=$(ask "Choice" "1")
 
 EMBEDDING_PROVIDER=""; EMBEDDING_API_KEY=""; EMBEDDING_MODEL=""
@@ -154,37 +138,37 @@ EMBEDDING_DIMENSIONS=""; EMBEDDING_BASE_URL=""
 
 case "$EMBED_CHOICE" in
   1)
+    EMBEDDING_PROVIDER=""
+    ;;
+  2)
     EMBEDDING_PROVIDER="openai"
     EMBEDDING_API_KEY=$(ask_secret "OpenAI API Key")
     EMBEDDING_MODEL=$(ask "Model" "text-embedding-3-small")
     EMBEDDING_DIMENSIONS=$(ask "Dimensions" "1536")
     ;;
-  2)
+  3)
     EMBEDDING_PROVIDER="gemini"
     EMBEDDING_API_KEY=$(ask_secret "Gemini API Key")
     EMBEDDING_MODEL=$(ask "Model" "gemini-embedding-001")
     EMBEDDING_DIMENSIONS=$(ask "Dimensions" "3072")
     warn "3072 dims requires migration-007 on first use."
     ;;
-  3)
+  4)
     EMBEDDING_PROVIDER="ollama"
     EMBEDDING_MODEL=$(ask "Model" "nomic-embed-text")
     EMBEDDING_DIMENSIONS=$(ask "Dimensions" "768")
     ;;
-  4)
+  5)
     EMBEDDING_PROVIDER="localai"
     EMBEDDING_MODEL=$(ask "Model" "text-embedding-ada-002")
     EMBEDDING_DIMENSIONS=$(ask "Dimensions" "1536")
     ;;
-  5)
+  6)
     EMBEDDING_PROVIDER="custom"
     EMBEDDING_BASE_URL=$(ask "Base URL (e.g. http://localhost:8080/v1)")
     EMBEDDING_API_KEY=$(ask_secret "API Key")
     EMBEDDING_MODEL=$(ask "Model name")
     EMBEDDING_DIMENSIONS=$(ask "Dimensions")
-    ;;
-  6)
-    EMBEDDING_PROVIDER=""
     ;;
 esac
 
@@ -237,7 +221,7 @@ fi
 
 cat >> "$ENV_FILE" <<EOF
 REDIS_DB=${REDIS_DB}
-CACHE_ENABLED=true
+CACHE_ENABLED=${REDIS_ENABLED}
 CACHE_DB_TTL=300
 EOF
 
@@ -274,49 +258,10 @@ fi
 echo
 
 # DB schema
-if [[ "$HAS_PSQL" == "true" ]] && ask_yn "Apply PostgreSQL schema?" "y"; then
-  echo "  1) Fresh install (base schema + deterministic migrations)"
-  echo "  2) Upgrade existing (deterministic migrations only)"
-  SCHEMA_CHOICE=$(ask "Choice" "1")
-
-  export DATABASE_URL
-  SQL_MIGRATIONS=(
-    "lib/memory/migration-001-temporal.sql"
-    "lib/memory/migration-002-decay.sql"
-    "lib/memory/migration-003-api-keys.sql"
-    "lib/memory/migration-004-key-isolation.sql"
-    "lib/memory/migration-005-gc-columns.sql"
-    "lib/memory/migration-006-superseded-by-constraint.sql"
-    "lib/memory/migration-007-link-weight.sql"
-    "lib/memory/migration-008-morpheme-dict.sql"
-  )
-
-  if [[ "$SCHEMA_CHOICE" == "1" ]]; then
-    info "Applying base schema snapshot..."
-    psql "$DATABASE_URL" -f lib/memory/memory-schema.sql
-    success "Base schema applied."
-
-    info "Applying latest migrations on top of the base schema..."
-    for file in "${SQL_MIGRATIONS[@]}"; do
-      run_sql_migration "$file"
-    done
-  else
-    info "Running deterministic migration sequence..."
-    for file in "${SQL_MIGRATIONS[@]}"; do
-      run_sql_migration "$file"
-    done
-  fi
-
-  if [[ -n "$EMBEDDING_PROVIDER" ]] && [[ "${EMBEDDING_DIMENSIONS:-0}" -gt 2000 ]]; then
-    warn "Dimensions ${EMBEDDING_DIMENSIONS} > 2000 require the JS dimension migration."
-    if ask_yn "Run migration-007?" "y"; then
-      EMBEDDING_DIMENSIONS="$EMBEDDING_DIMENSIONS" DATABASE_URL="$DATABASE_URL" \
-        node lib/memory/migration-007-flexible-embedding-dims.js
-      success "migration-007 done."
-    else
-      warn "Remember to run: EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS} DATABASE_URL=\$DATABASE_URL node lib/memory/migration-007-flexible-embedding-dims.js"
-    fi
-  fi
+if ask_yn "Run npm run db:init now?" "y"; then
+  info "Running npm run db:init..."
+  npm run db:init
+  success "Database bootstrap completed."
 
   if [[ -n "$EMBEDDING_PROVIDER" ]]; then
     if ask_yn "Run L2 normalization on existing vectors? (one-time)" "y"; then
@@ -324,8 +269,6 @@ if [[ "$HAS_PSQL" == "true" ]] && ask_yn "Apply PostgreSQL schema?" "y"; then
       success "L2 normalization done."
     fi
   fi
-elif [[ "$HAS_PSQL" != "true" ]]; then
-  warn "Skipping schema step because psql is not available."
 fi
 
 echo
@@ -335,6 +278,7 @@ echo -e "${GREEN}${BOLD}------------------------------------------${RESET}"
 echo
 echo "Verification"
 echo "  1) Start the server: node server.js"
+echo "     .env is loaded automatically; no 'source .env' step is required."
 echo "  2) Liveness probe:  curl -i http://localhost:${PORT}/health"
 echo "     Expected: HTTP 200. Redis shows 'disabled' when REDIS_ENABLED=false."
 echo "  3) Readiness probe: curl -i http://localhost:${PORT}/ready"

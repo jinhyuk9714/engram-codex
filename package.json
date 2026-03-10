@@ -7,9 +7,10 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
+    "db:init": "node lib/memory/db-init.js",
     "lint": "eslint .",
     "test": "LOG_DIR=tmp/test-logs NODE_ENV=test node --test tests/unit/*.test.js tests/integration/pipeline-overhaul.test.js",
-    "test:db": "LOG_DIR=tmp/test-logs NODE_ENV=test node --test tests/integration/temporal.test.js",
+    "test:db": "LOG_DIR=tmp/test-logs NODE_ENV=test node --test --test-concurrency=1 tests/integration/temporal.test.js tests/integration/db-init.test.js",
     "backfill:embeddings": "node lib/memory/backfill-embeddings.js"
   },
   "dependencies": {

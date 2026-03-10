@@ -170,33 +170,55 @@ Optional components improve semantic search and evaluation quality.
 
 ### Requirements
 
-- Node.js 20+
-- PostgreSQL 14+ with `pgvector`
-- Redis 6+ (optional)
+- Docker + Docker Compose
+- Codex app or Codex CLI
 
-### Installation
+### Docker Compose quickstart
+
+```bash
+cp .env.example .env
+# Edit .env and set MEMENTO_ACCESS_KEY plus your PostgreSQL credentials
+docker compose up --build
+```
+
+Basic verification:
+
+```bash
+curl -i http://localhost:57332/health
+curl -i http://localhost:57332/ready
+```
+
+- `/health`: liveness probe. Returns `200` as long as the process can serve requests.
+- `/ready`: readiness probe. Returns `200` only when PostgreSQL is reachable.
+- When `REDIS_ENABLED=false`, Redis is reported as `disabled` and does not make readiness fail.
+- `.env` is loaded automatically at runtime; no `source .env` step is required.
+
+Codex app / CLI config:
+
+```toml
+[mcp_servers.engram-codex]
+url = "http://localhost:57332/mcp"
+bearer_token_env_var = "MEMENTO_ACCESS_KEY"
+```
+
+Shutdown / cleanup:
+
+```bash
+docker compose down -v
+```
+
+For installation details, manual migrations, and Codex app/CLI setup, see **[INSTALL.en.md](INSTALL.en.md)**.
+
+### Manual installation
 
 ```bash
 npm install
 cp .env.example .env
+npm run db:init
+npm start
 ```
 
-For installation, migrations, and Codex app/CLI setup, see **[INSTALL.en.md](INSTALL.en.md)**.
-
-### Minimal configuration example
-
-```env
-PORT=57332
-MEMENTO_ACCESS_KEY=your-master-key
-
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_DB=your_db
-POSTGRES_USER=your_user
-POSTGRES_PASSWORD=your_password
-
-REDIS_ENABLED=false
-```
+`.env` is auto-loaded on the manual path as well. Your PostgreSQL server still needs `pgvector` installed, and `npm run db:init` is the canonical bootstrap command for the extension and latest schema.
 
 To enable semantic retrieval and automatic linking, add an embedding provider:
 
@@ -211,38 +233,20 @@ If you need an emergency rollback from the in-process ONNX classifier without st
 NLI_DISABLE_INPROCESS=true
 ```
 
-### Run
-
-```bash
-npm start
-```
-
-The default port is `57332`.
-
-Basic verification:
-
-```bash
-curl -i http://localhost:57332/health
-curl -i http://localhost:57332/ready
-```
-
-- `/health`: liveness probe. Returns `200` as long as the process can serve requests.
-- `/ready`: readiness probe. Returns `200` only when PostgreSQL is reachable.
-- When `REDIS_ENABLED=false`, Redis is reported as `disabled` and does not make readiness fail.
-- `NLI_DISABLE_INPROCESS=true` is an operational fallback. Without `NLI_SERVICE_URL`, it skips in-process NLI preload and inference.
-
 ---
 
 ## Useful commands
 
 ```bash
 npm start
+npm run db:init
 npm lint
 npm test
 npm run test:db
 npm run backfill:embeddings
 ```
 
+- `npm run db:init`: ensures the `vector` extension, base schema, migrations 001-008, and flexible-dims migration when needed
 - `npm test`: unit tests plus safe local integration tests
 - `npm run test:db`: integration tests that require a PostgreSQL connection
 - `npm run backfill:embeddings`: bulk-generate embeddings for existing fragments

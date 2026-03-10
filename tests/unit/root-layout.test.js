@@ -16,6 +16,8 @@ describe("root layout", () => {
   test("keeps public docs at the root while moving support files under docs and scripts", () => {
     assert.equal(fs.existsSync(path.join(ROOT_DIR, "README.md")), true);
     assert.equal(fs.existsSync(path.join(ROOT_DIR, "INSTALL.md")), true);
+    assert.equal(fs.existsSync(path.join(ROOT_DIR, "Dockerfile")), true);
+    assert.equal(fs.existsSync(path.join(ROOT_DIR, "compose.yaml")), true);
     assert.equal(fs.existsSync(path.join(ROOT_DIR, "SKILL.md")), false);
     assert.equal(fs.existsSync(path.join(ROOT_DIR, "docs/skills/SKILL.md")), true);
     assert.equal(fs.existsSync(path.join(ROOT_DIR, "scripts/setup.sh")), true);
@@ -24,8 +26,12 @@ describe("root layout", () => {
 
   test("documents scripts and docs/skills as the canonical locations", () => {
     assert.match(read("setup.sh"), /scripts\/setup\.sh/);
+    assert.match(read("INSTALL.md"), /docker compose up --build/);
+    assert.match(read("INSTALL.en.md"), /docker compose up --build/);
     assert.match(read("INSTALL.md"), /bash scripts\/setup\.sh/);
     assert.match(read("INSTALL.en.md"), /bash scripts\/setup\.sh/);
+    assert.match(read("README.md"), /docker compose up --build/);
+    assert.match(read("README.en.md"), /docker compose up --build/);
     assert.match(read("README.md"), /scripts\//);
     assert.match(read("README.md"), /docs\/skills\//);
     assert.match(read("README.en.md"), /scripts\//);

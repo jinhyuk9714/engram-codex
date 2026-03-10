@@ -268,29 +268,24 @@ EMBEDDING_PROVIDER=ollama
 ## 9. 실행 방법
 
 ```bash
-# 신규 설치: PostgreSQL 스키마 초기화
-psql -U postgres -c "CREATE EXTENSION IF NOT EXISTS vector;"
-psql -U postgres -d engram_codex -f lib/memory/memory-schema.sql
+# 제일 쉬운 로컬 체험 경로
+cp .env.example .env
+# .env에서 MEMENTO_ACCESS_KEY와 PostgreSQL 계정 수정
+docker compose up --build
 
-# 기존 설치 업그레이드: 마이그레이션 순서대로 실행
-psql $DATABASE_URL -f lib/memory/migration-001-temporal.sql      # Temporal 컬럼 추가
-psql $DATABASE_URL -f lib/memory/migration-002-decay.sql         # last_decay_at 추가
-psql $DATABASE_URL -f lib/memory/migration-003-api-keys.sql      # API 키 관리 테이블 추가
-psql $DATABASE_URL -f lib/memory/migration-004-key-isolation.sql # fragments.key_id 격리 컬럼 추가
-psql $DATABASE_URL -f lib/memory/migration-005-gc-columns.sql    # GC 보조 컬럼 추가
-psql $DATABASE_URL -f lib/memory/migration-006-superseded-by-constraint.sql # superseded_by FK 제약 추가
+# 종료할 때
+docker compose down -v
+```
 
-> **v1.1.0 이전 업그레이드 필독**: migration-006 미실행 시 `amend`/`memory_consolidate` 등에서 DB 에러 발생.
+수동으로 설치하고 싶으면:
 
-# 2000차원 초과 모델(Gemini 등) 사용 시에만:
-# EMBEDDING_DIMENSIONS=3072 DATABASE_URL=$DATABASE_URL node lib/memory/migration-007-flexible-embedding-dims.js
-DATABASE_URL=$DATABASE_URL node lib/memory/normalize-vectors.js  # 임베딩 L2 정규화 (1회)
-
-# 서버 실행
+```bash
 npm install
-# (팁) CUDA 설치 오류 시: npm install --onnxruntime-node-install-cuda=skip
+npm run db:init
 npm start
 ```
+
+`.env`는 자동 로드되니까 `source .env`는 필요 없다. `npm run db:init`이 `vector` extension, base schema, migration 001~008까지 한 번에 맞춘다.
 
 Codex app/CLI 설정에 아래를 추가하면 된다.
 

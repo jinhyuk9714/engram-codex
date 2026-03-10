@@ -1,97 +1,16 @@
 # 설치 가이드
 
-## 빠른 시작 (대화형 설치 스크립트)
+## 빠른 시작 (Docker Compose)
 
-```bash
-bash scripts/setup.sh
-
-# 호환 경로
-# bash setup.sh
-```
-
-.env 생성, npm install, DB 스키마 적용까지 단계별로 안내한다.
-스크립트는 Node.js/`npm`/`python3`를 먼저 점검하고, `psql`이 없으면 스키마 단계를 건너뛸 수 있게 안내한다.
-
----
-
-## 수동 설치
-
-## 의존성 설치
-
-```bash
-npm install
-
-# (선택) CUDA 11 환경에서 설치 오류 발생 시 CPU 전용으로 설치
-# npm install --onnxruntime-node-install-cuda=skip
-```
-
-### 주의사항: ONNX Runtime 및 CUDA
-
-CUDA 11이 설치된 시스템에서 `@huggingface/transformers`의 의존성인 `onnxruntime-node`가 GPU 바인딩을 시도하다 설치에 실패할 수 있습니다. 이 프로젝트는 CPU 전용으로 최적화되어 있으므로, 설치 시 `--onnxruntime-node-install-cuda=skip` 플래그를 사용하면 문제 없이 설치됩니다.
-
-## PostgreSQL 스키마 적용
-
-신규 설치는 base schema를 적용한 뒤, 최신 코드가 요구하는 컬럼/테이블까지 deterministic migration sequence를 모두 실행한다.
-
-```bash
-# 신규 설치: base schema + 최신 migration 전체 적용
-psql -U $POSTGRES_USER -d $POSTGRES_DB -f lib/memory/memory-schema.sql
-psql $DATABASE_URL -f lib/memory/migration-001-temporal.sql      # Temporal 컬럼 추가
-psql $DATABASE_URL -f lib/memory/migration-002-decay.sql         # last_decay_at 컬럼 추가
-psql $DATABASE_URL -f lib/memory/migration-003-api-keys.sql      # API 키 관리 테이블 추가
-psql $DATABASE_URL -f lib/memory/migration-004-key-isolation.sql # fragments.key_id 격리 컬럼 추가
-psql $DATABASE_URL -f lib/memory/migration-005-gc-columns.sql    # GC 정책 인덱스 추가
-psql $DATABASE_URL -f lib/memory/migration-006-superseded-by-constraint.sql # fragment_links CHECK에 superseded_by 추가
-psql $DATABASE_URL -f lib/memory/migration-007-link-weight.sql   # 링크 weight 컬럼 추가
-psql $DATABASE_URL -f lib/memory/migration-008-morpheme-dict.sql # 형태소 사전 테이블 추가
-```
-
-## 업그레이드 (기존 설치)
-
-기존 설치 업그레이드는 아래 migration sequence만 실행한다.
-
-```bash
-psql $DATABASE_URL -f lib/memory/migration-001-temporal.sql      # Temporal 컬럼 추가
-psql $DATABASE_URL -f lib/memory/migration-002-decay.sql         # last_decay_at 컬럼 추가
-psql $DATABASE_URL -f lib/memory/migration-003-api-keys.sql      # API 키 관리 테이블 추가
-psql $DATABASE_URL -f lib/memory/migration-004-key-isolation.sql # fragments.key_id 격리 컬럼 추가
-psql $DATABASE_URL -f lib/memory/migration-005-gc-columns.sql    # GC 정책 인덱스 추가
-psql $DATABASE_URL -f lib/memory/migration-006-superseded-by-constraint.sql # fragment_links CHECK에 superseded_by 추가
-psql $DATABASE_URL -f lib/memory/migration-007-link-weight.sql   # 링크 weight 컬럼 추가
-psql $DATABASE_URL -f lib/memory/migration-008-morpheme-dict.sql # 형태소 사전 테이블 추가
-```
-
-> **v1.1.0 이전에서 업그레이드하는 경우**: migration-006 미실행 시 `amend`, `memory_consolidate`, GraphLinker 자동 관계 생성에서 DB 제약 에러가 발생한다(`superseded_by` INSERT 실패). 기존 DB를 유지하며 업그레이드할 때 반드시 실행해야 한다.
-
-```bash
-# 기본 임베딩(1536차원) 사용 시: migration-007 불필요
-# 2000차원 초과 모델(Gemini gemini-embedding-001 등) 사용 시:
-# EMBEDDING_DIMENSIONS=3072 DATABASE_URL=$DATABASE_URL node lib/memory/migration-007-flexible-embedding-dims.js
-
-DATABASE_URL=$DATABASE_URL node lib/memory/normalize-vectors.js  # 임베딩 L2 정규화 (1회)
-
-# 기존 파편 임베딩 백필 (임베딩 API 키 필요, 1회성)
-npm run backfill:embeddings
-```
-
-## 환경 변수 설정
+가장 쉬운 로컬 체험 경로다. 기본 스택은 `postgres + engram-codex`만 포함한다.
 
 ```bash
 cp .env.example .env
-# .env 파일에서 DATABASE_URL, MEMENTO_ACCESS_KEY 등 필수 값 입력
+# .env에서 MEMENTO_ACCESS_KEY와 PostgreSQL 계정을 원하는 값으로 수정
+docker compose up --build
 ```
 
-환경 변수 전체 목록은 [README.md — 환경 변수](README.md#환경-변수) 참조.
-
-운영 중 in-process ONNX NLI를 긴급 우회해야 하면 `.env`에 `NLI_DISABLE_INPROCESS=true`를 추가한다. 이는 외부 `NLI_SERVICE_URL`이 없을 때만 적용되며, 정상 기본값은 `false`다.
-
-## 서버 실행
-
-```bash
-node server.js
-```
-
-## 서버 확인
+확인:
 
 ```bash
 curl -i http://localhost:57332/health
@@ -102,18 +21,13 @@ curl -i http://localhost:57332/metrics
 - `/health`는 liveness probe다. 프로세스가 살아 있으면 `200`을 반환한다.
 - `/ready`는 readiness probe다. PostgreSQL 연결이 실제로 성공할 때만 `200`을 반환한다.
 - `REDIS_ENABLED=false`인 경우 Redis는 `disabled`로 보고되며 readiness 실패로 간주되지 않는다.
-- `NLI_DISABLE_INPROCESS=true`를 쓰면 shutdown 안정화용으로 in-process NLI preload/추론을 건너뛸 수 있다.
+- `.env`는 자동 로드되므로 `source .env`가 필요 없다.
 
-## 테스트
+종료/정리:
 
 ```bash
-npm test
-
-# PostgreSQL과 DATABASE_URL이 준비된 경우만
-npm run test:db
+docker compose down -v
 ```
-
-`npm test`는 로컬에서 바로 검증 가능한 테스트만 실행한다. temporal 통합 테스트는 Postgres 의존성이 있으므로 `npm run test:db`로 분리되어 있다.
 
 ## Codex app / CLI 연결
 
@@ -132,6 +46,103 @@ bearer_token_env_var = "MEMENTO_ACCESS_KEY"
 ```
 
 프로젝트별로만 켜고 싶다면 신뢰된 저장소의 `.codex/config.toml`에서 같은 서버를 override해도 된다. Codex app과 CLI는 이 MCP 설정을 함께 사용한다.
+
+---
+
+## 수동 설치
+
+### 대화형 설치 스크립트
+
+```bash
+bash scripts/setup.sh
+
+# 호환 경로
+# bash setup.sh
+```
+
+.env 생성, `npm install`, `npm run db:init`까지 단계별로 안내한다.
+
+### 의존성 설치
+
+```bash
+npm install
+
+# (선택) CUDA 11 환경에서 설치 오류 발생 시 CPU 전용으로 설치
+# npm install --onnxruntime-node-install-cuda=skip
+```
+
+### 주의사항: ONNX Runtime 및 CUDA
+
+CUDA 11이 설치된 시스템에서 `@huggingface/transformers`의 의존성인 `onnxruntime-node`가 GPU 바인딩을 시도하다 설치에 실패할 수 있습니다. 이 프로젝트는 CPU 전용으로 최적화되어 있으므로, 설치 시 `--onnxruntime-node-install-cuda=skip` 플래그를 사용하면 문제 없이 설치됩니다.
+
+### PostgreSQL 준비
+
+수동 경로에서는 PostgreSQL 14+와 `pgvector`가 필요하다. DB 서버에 확장이 설치되어 있어야 `npm run db:init`이 `CREATE EXTENSION vector`를 성공시킬 수 있다.
+
+### DB bootstrap / 업그레이드
+
+```bash
+npm run db:init
+```
+
+`npm run db:init`은 아래를 순서대로 수행한다.
+- `CREATE EXTENSION IF NOT EXISTS vector`
+- `memory-schema.sql`
+- migration `001` ~ `008`
+- `EMBEDDING_DIMENSIONS > 2000`인 경우 flexible-dims JS migration
+
+기존 설치 업그레이드에도 같은 명령을 사용하면 된다. idempotent하게 설계되어 있어 새 DB와 기존 DB 모두 같은 최신 상태로 맞춘다.
+
+```bash
+# 임베딩 차원 전환 후 기존 벡터를 재정규화해야 하는 경우
+node lib/memory/normalize-vectors.js
+
+# 기존 파편 임베딩 백필 (임베딩 API 키 필요, 1회성)
+npm run backfill:embeddings
+```
+
+### 환경 변수 설정
+
+```bash
+cp .env.example .env
+# .env 파일에서 DATABASE_URL, MEMENTO_ACCESS_KEY 등 필수 값 입력
+```
+
+- `DATABASE_URL`은 `npm run db:init`과 maintenance 스크립트의 canonical DSN이다.
+- 런타임은 `POSTGRES_*`와 `DATABASE_URL`을 모두 지원한다.
+- `.env`는 자동 로드되므로 `source .env`가 필요 없다.
+
+운영 중 in-process ONNX NLI를 긴급 우회해야 하면 `.env`에 `NLI_DISABLE_INPROCESS=true`를 추가한다. 이는 외부 `NLI_SERVICE_URL`이 없을 때만 적용되며, 정상 기본값은 `false`다.
+
+### 서버 실행
+
+```bash
+npm start
+```
+
+### 서버 확인
+
+```bash
+curl -i http://localhost:57332/health
+curl -i http://localhost:57332/ready
+curl -i http://localhost:57332/metrics
+```
+
+- `/health`는 liveness probe다. 프로세스가 살아 있으면 `200`을 반환한다.
+- `/ready`는 readiness probe다. PostgreSQL 연결이 실제로 성공할 때만 `200`을 반환한다.
+- `REDIS_ENABLED=false`인 경우 Redis는 `disabled`로 보고되며 readiness 실패로 간주되지 않는다.
+- `NLI_DISABLE_INPROCESS=true`를 쓰면 shutdown 안정화용으로 in-process NLI preload/추론을 건너뛸 수 있다.
+
+### 테스트
+
+```bash
+npm test
+
+# PostgreSQL과 DATABASE_URL이 준비된 경우만
+npm run test:db
+```
+
+`npm test`는 로컬에서 바로 검증 가능한 테스트만 실행한다. temporal 통합 테스트는 Postgres 의존성이 있으므로 `npm run test:db`로 분리되어 있다.
 
 ## 세션 시작 규칙 권장
 

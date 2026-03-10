@@ -2,6 +2,8 @@
  * Engram Codex Server (HTTP) - production bootstrap
  */
 
+import "./lib/load-env.js";
+
 import { PORT, ACCESS_KEY, SESSION_TTL_MS, LOG_DIR, RATE_LIMIT_WINDOW_MS, RATE_LIMIT_MAX_REQUESTS } from "./lib/config.js";
 import { RateLimiter } from "./lib/rate-limiter.js";
 import {
