@@ -233,6 +233,12 @@ EMBEDDING_PROVIDER=openai
 OPENAI_API_KEY=sk-...
 ```
 
+NLI 외부 서비스를 쓰지 않지만 in-process ONNX를 긴급 우회해야 하면 아래 설정으로 비활성화할 수 있습니다.
+
+```env
+NLI_DISABLE_INPROCESS=true
+```
+
 ### 실행
 
 ```bash
@@ -240,6 +246,18 @@ npm start
 ```
 
 기본 포트는 `57332`입니다.
+
+기본 확인:
+
+```bash
+curl -i http://localhost:57332/health
+curl -i http://localhost:57332/ready
+```
+
+- `/health`: liveness 용도. 프로세스가 요청을 처리할 수 있으면 `200`을 반환한다.
+- `/ready`: readiness 용도. PostgreSQL이 실제로 응답할 때만 `200`을 반환한다.
+- `REDIS_ENABLED=false`인 경우 Redis 상태는 `disabled`로 보고되며 readiness 실패 사유로 취급하지 않는다.
+- `NLI_DISABLE_INPROCESS=true`는 운영 우회용이다. 외부 `NLI_SERVICE_URL` 없이 설정하면 in-process NLI preload와 추론을 건너뛴다.
 
 ---
 
@@ -273,6 +291,8 @@ npm run backfill:embeddings
 - 세션 활동 추적
 - 캐시/큐 기반 최적화
 
+> Redis는 선택 구성이다. Redis를 끄더라도 기본 MCP 기능과 PostgreSQL 기반 검색은 그대로 동작한다.
+
 ### 임베딩 provider까지 있는 경우
 
 - pgvector 시맨틱 검색
@@ -296,7 +316,8 @@ npm run backfill:embeddings
 | `DELETE` | `/mcp`                                    | Streamable HTTP 세션 종료        |
 | `GET`    | `/sse`                                    | Legacy SSE 세션 생성             |
 | `POST`   | `/message`                                | Legacy SSE JSON-RPC 요청         |
-| `GET`    | `/health`                                 | 헬스 체크                        |
+| `GET`    | `/health`                                 | Liveness probe                   |
+| `GET`    | `/ready`                                  | PostgreSQL readiness probe       |
 | `GET`    | `/metrics`                                | Prometheus 메트릭                |
 | `GET`    | `/.well-known/oauth-authorization-server` | OAuth 2.0 인가 서버 메타데이터   |
 | `GET`    | `/.well-known/oauth-protected-resource`   | OAuth 2.0 보호 리소스 메타데이터 |
@@ -304,6 +325,9 @@ npm run backfill:embeddings
 | `POST`   | `/token`                                  | OAuth 2.0 토큰 엔드포인트        |
 
 관리용 API 키 대시보드 엔드포인트는 `/v1/internal/model/nothing/*` 아래에 제공됩니다.
+
+- `/health`는 선택 의존성 상태를 함께 보여주지만, Redis 비활성화만으로 실패하지 않는다.
+- `/ready`는 필수 의존성인 PostgreSQL 준비 상태를 본다.
 
 ---
 

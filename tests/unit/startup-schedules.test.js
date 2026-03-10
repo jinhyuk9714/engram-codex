@@ -2,6 +2,7 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
 import {
+  clearRecurringJobs,
   getConsolidateIntervalMs,
   registerRecurringJobs
 } from "../../lib/http/startup.js";
@@ -83,5 +84,23 @@ describe("registerRecurringJobs", () => {
     await scheduled[5].fn();
     assert.equal(mm.consolidateCalls, 1);
     assert.equal(mm.store.embeddingCalls, 1);
+  });
+});
+
+describe("clearRecurringJobs", () => {
+  it("clears every registered interval handle", () => {
+    const jobs = {
+      sessionCleanup: { id: 1 },
+      oauthCleanup: { id: 2 },
+      sessionMetrics: { id: 3 },
+      accessStats: { id: 4 },
+      consolidate: { id: 5 },
+      embeddingBackfill: { id: 6 }
+    };
+    const cleared = [];
+
+    clearRecurringJobs(jobs, (handle) => cleared.push(handle.id));
+
+    assert.deepEqual(cleared, [1, 2, 3, 4, 5, 6]);
   });
 });

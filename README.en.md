@@ -233,6 +233,12 @@ EMBEDDING_PROVIDER=openai
 OPENAI_API_KEY=sk-...
 ```
 
+If you need an emergency rollback from the in-process ONNX classifier without standing up an external NLI service, use:
+
+```env
+NLI_DISABLE_INPROCESS=true
+```
+
 ### Run
 
 ```bash
@@ -240,6 +246,18 @@ npm start
 ```
 
 The default port is `57332`.
+
+Basic verification:
+
+```bash
+curl -i http://localhost:57332/health
+curl -i http://localhost:57332/ready
+```
+
+- `/health`: liveness probe. Returns `200` as long as the process can serve requests.
+- `/ready`: readiness probe. Returns `200` only when PostgreSQL is reachable.
+- When `REDIS_ENABLED=false`, Redis is reported as `disabled` and does not make readiness fail.
+- `NLI_DISABLE_INPROCESS=true` is an operational fallback. Without `NLI_SERVICE_URL`, it skips in-process NLI preload and inference.
 
 ---
 
@@ -273,6 +291,8 @@ npm run backfill:embeddings
 - session activity tracking
 - cache and queue-based optimizations
 
+> Redis is optional. Disabling Redis does not disable the baseline MCP toolset or PostgreSQL-backed retrieval.
+
 ### PostgreSQL + Redis + embeddings
 
 - pgvector semantic retrieval
@@ -296,7 +316,8 @@ npm run backfill:embeddings
 | `DELETE` | `/mcp` | Streamable HTTP session close |
 | `GET` | `/sse` | Legacy SSE session creation |
 | `POST` | `/message` | Legacy SSE JSON-RPC request |
-| `GET` | `/health` | Health check |
+| `GET` | `/health` | Liveness probe |
+| `GET` | `/ready` | PostgreSQL readiness probe |
 | `GET` | `/metrics` | Prometheus metrics |
 | `GET` | `/.well-known/oauth-authorization-server` | OAuth 2.0 authorization server metadata |
 | `GET` | `/.well-known/oauth-protected-resource` | OAuth 2.0 protected resource metadata |
@@ -304,6 +325,9 @@ npm run backfill:embeddings
 | `POST` | `/token` | OAuth 2.0 token endpoint |
 
 Admin API key dashboard endpoints are available under `/v1/internal/model/nothing/*`.
+
+- `/health` includes dependency details, but a disabled Redis instance is not treated as a failure.
+- `/ready` reflects required dependency readiness, which currently means PostgreSQL.
 
 ---
 

@@ -11,6 +11,25 @@ success() { echo -e "${GREEN}${BOLD}[ok]${RESET} $*"; }
 warn()    { echo -e "${YELLOW}${BOLD}[!]${RESET} $*"; }
 error()   { echo -e "${RED}${BOLD}[x]${RESET} $*" >&2; }
 
+command_exists() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+require_command() {
+  local cmd="$1" message="${2:-}"
+  if ! command_exists "$cmd"; then
+    error "${cmd} is required. ${message}"
+    exit 1
+  fi
+}
+
+run_sql_migration() {
+  local file="$1"
+  info "Applying $(basename "$file")..."
+  psql "$DATABASE_URL" -f "$file"
+  success "$(basename "$file") done."
+}
+
 ask() {
   local prompt="$1" default="${2:-}" var
   if [[ -n "$default" ]]; then
@@ -40,6 +59,28 @@ echo
 echo -e "${BOLD}------------------------------------------${RESET}"
 echo -e "${BOLD}  Engram Codex -- Interactive Setup${RESET}"
 echo -e "${BOLD}------------------------------------------${RESET}"
+echo
+
+info "Preflight checks"
+require_command node "Install Node.js 20+ first."
+require_command npm "Install npm before running setup."
+require_command python3 "python3 is used to safely encode DATABASE_URL credentials."
+
+NODE_MAJOR=$(node -p "process.versions.node.split('.')[0]")
+if (( NODE_MAJOR < 20 )); then
+  error "Node.js 20+ is required. Current version: $(node -v)"
+  exit 1
+fi
+success "Node.js $(node -v) detected"
+
+HAS_PSQL="false"
+if command_exists psql; then
+  HAS_PSQL="true"
+  success "psql detected"
+else
+  warn "psql not found. Schema and migration steps can be skipped now and run later."
+fi
+
 echo
 
 # .env check
@@ -229,33 +270,47 @@ fi
 echo
 
 # DB schema
-if ask_yn "Apply PostgreSQL schema?" "y"; then
-  echo "  1) Fresh install (memory-schema.sql)"
-  echo "  2) Upgrade existing (migration-001 through 006)"
+if [[ "$HAS_PSQL" == "true" ]] && ask_yn "Apply PostgreSQL schema?" "y"; then
+  echo "  1) Fresh install (base schema + deterministic migrations)"
+  echo "  2) Upgrade existing (deterministic migrations only)"
   SCHEMA_CHOICE=$(ask "Choice" "1")
 
   export DATABASE_URL
+  SQL_MIGRATIONS=(
+    "lib/memory/migration-001-temporal.sql"
+    "lib/memory/migration-002-decay.sql"
+    "lib/memory/migration-003-api-keys.sql"
+    "lib/memory/migration-004-key-isolation.sql"
+    "lib/memory/migration-005-gc-columns.sql"
+    "lib/memory/migration-006-superseded-by-constraint.sql"
+    "lib/memory/migration-007-link-weight.sql"
+    "lib/memory/migration-008-morpheme-dict.sql"
+  )
 
   if [[ "$SCHEMA_CHOICE" == "1" ]]; then
-    info "Applying schema..."
+    info "Applying base schema snapshot..."
     psql "$DATABASE_URL" -f lib/memory/memory-schema.sql
-    success "Schema applied."
+    success "Base schema applied."
+
+    info "Applying latest migrations on top of the base schema..."
+    for file in "${SQL_MIGRATIONS[@]}"; do
+      run_sql_migration "$file"
+    done
   else
-    info "Running migrations..."
-    for i in 001 002 003 004 005 006 007 008; do
-      f="lib/memory/migration-${i}-"*".sql"
-      if compgen -G "$f" > /dev/null; then
-        psql "$DATABASE_URL" -f $f && success "migration-${i} done." || warn "migration-${i} failed (may already be applied)."
-      fi
+    info "Running deterministic migration sequence..."
+    for file in "${SQL_MIGRATIONS[@]}"; do
+      run_sql_migration "$file"
     done
   fi
 
   if [[ -n "$EMBEDDING_PROVIDER" ]] && [[ "${EMBEDDING_DIMENSIONS:-0}" -gt 2000 ]]; then
-    warn "Dimensions ${EMBEDDING_DIMENSIONS} > 2000 -- migration-007 required."
+    warn "Dimensions ${EMBEDDING_DIMENSIONS} > 2000 require the JS dimension migration."
     if ask_yn "Run migration-007?" "y"; then
       EMBEDDING_DIMENSIONS="$EMBEDDING_DIMENSIONS" DATABASE_URL="$DATABASE_URL" \
         node lib/memory/migration-007-flexible-embedding-dims.js
       success "migration-007 done."
+    else
+      warn "Remember to run: EMBEDDING_DIMENSIONS=${EMBEDDING_DIMENSIONS} DATABASE_URL=\$DATABASE_URL node lib/memory/migration-007-flexible-embedding-dims.js"
     fi
   fi
 
@@ -265,10 +320,20 @@ if ask_yn "Apply PostgreSQL schema?" "y"; then
       success "L2 normalization done."
     fi
   fi
+elif [[ "$HAS_PSQL" != "true" ]]; then
+  warn "Skipping schema step because psql is not available."
 fi
 
 echo
 echo -e "${GREEN}${BOLD}------------------------------------------${RESET}"
 echo -e "${GREEN}${BOLD}  Setup complete. Start: node server.js${RESET}"
 echo -e "${GREEN}${BOLD}------------------------------------------${RESET}"
+echo
+echo "Verification"
+echo "  1) Start the server: node server.js"
+echo "  2) Liveness probe:  curl -i http://localhost:${PORT}/health"
+echo "     Expected: HTTP 200. Redis shows 'disabled' when REDIS_ENABLED=false."
+echo "  3) Readiness probe: curl -i http://localhost:${PORT}/ready"
+echo "     Expected: HTTP 200 only when PostgreSQL is reachable."
+echo "  4) Metrics probe:   curl -i http://localhost:${PORT}/metrics"
 echo
