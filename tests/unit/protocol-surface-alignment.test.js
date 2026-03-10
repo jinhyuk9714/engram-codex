@@ -17,11 +17,17 @@ const DOC_PATHS = [
 ];
 
 const CODE_TEXT_PATHS = [
+  "lib/config.js",
+  "config/memory.js",
+  "server.js",
+  "scripts/setup.sh",
   "lib/auth.js",
   "lib/gemini.js",
   "lib/memory/NLIClassifier.js",
   "lib/memory/normalize-vectors.js",
   "lib/memory/memory-schema.sql",
+  "lib/http/server.js",
+  ".env.example",
   "tests/unit/http-server.test.js"
 ];
 
@@ -33,8 +39,17 @@ const DOC_DISALLOWED_PATTERNS = [
   /long-running operation support/g
 ];
 
+const DOC_LEGACY_SNIPPET_PATTERNS = [
+  /bearer_token_env_var = "MEMENTO_ACCESS_KEY"/g,
+  /export MEMENTO_ACCESS_KEY=/g,
+  /# .*MEMENTO_ACCESS_KEY/g
+];
+
 const CODE_DISALLOWED_PATTERNS = [
   /\bMemento\b/g,
+  /MEMENTO_ACCESS_KEY/g,
+  /memento-access-key/g,
+  /memento:embedding_queue/g,
   /\bnerdvana MCP\b/g,
   /\bnerdvana-nli-service\b/g,
   /psql -U nerdvana -d nerdvana_mcp/g,
@@ -53,6 +68,21 @@ describe("protocol surface alignment docs", () => {
           source,
           pattern,
           `${relativePath} should not contain ${pattern}`
+        );
+      }
+    }
+  });
+
+  test("user-facing setup snippets use ENGRAM_ACCESS_KEY instead of legacy config names", () => {
+    for (const relativePath of DOC_PATHS) {
+      const fullPath = path.join(ROOT_DIR, relativePath);
+      const source = fs.readFileSync(fullPath, "utf8");
+
+      for (const pattern of DOC_LEGACY_SNIPPET_PATTERNS) {
+        assert.doesNotMatch(
+          source,
+          pattern,
+          `${relativePath} should not contain legacy setup snippet ${pattern}`
         );
       }
     }

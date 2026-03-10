@@ -46,7 +46,7 @@ server.listen(PORT, () => {
   if (ACCESS_KEY) {
     console.log("Authentication: ENABLED");
   } else {
-    console.log("Authentication: DISABLED (set MEMENTO_ACCESS_KEY to enable)");
+    console.log("Authentication: DISABLED (set ENGRAM_ACCESS_KEY to enable)");
   }
 
   console.log(`Session TTL: ${SESSION_TTL_MS / 60000} minutes`);

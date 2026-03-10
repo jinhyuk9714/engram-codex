@@ -177,7 +177,7 @@ Optional components improve semantic search and evaluation quality.
 
 ```bash
 cp .env.example .env
-# Edit .env and set MEMENTO_ACCESS_KEY plus your PostgreSQL credentials
+# Edit .env and set ENGRAM_ACCESS_KEY plus your PostgreSQL credentials
 docker compose up --build
 ```
 
@@ -198,7 +198,7 @@ Codex app / CLI config:
 ```toml
 [mcp_servers.engram-codex]
 url = "http://localhost:57332/mcp"
-bearer_token_env_var = "MEMENTO_ACCESS_KEY"
+bearer_token_env_var = "ENGRAM_ACCESS_KEY"
 ```
 
 Shutdown / cleanup:

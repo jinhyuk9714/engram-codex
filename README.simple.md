@@ -270,7 +270,7 @@ EMBEDDING_PROVIDER=ollama
 ```bash
 # 제일 쉬운 로컬 체험 경로
 cp .env.example .env
-# .env에서 MEMENTO_ACCESS_KEY와 PostgreSQL 계정 수정
+# .env에서 ENGRAM_ACCESS_KEY와 PostgreSQL 계정 수정
 docker compose up --build
 
 # 종료할 때
@@ -292,7 +292,7 @@ Codex app/CLI 설정에 아래를 추가하면 된다.
 ```toml
 [mcp_servers.engram-codex]
 url = "http://localhost:57332/mcp"
-bearer_token_env_var = "MEMENTO_ACCESS_KEY"
+bearer_token_env_var = "ENGRAM_ACCESS_KEY"
 ```
 
 ---

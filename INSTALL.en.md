@@ -6,7 +6,7 @@ This is the primary local-trial path. The default stack is only `postgres + engr
 
 ```bash
 cp .env.example .env
-# Edit .env and set MEMENTO_ACCESS_KEY plus your PostgreSQL credentials
+# Edit .env and set ENGRAM_ACCESS_KEY plus your PostgreSQL credentials
 docker compose up --build
 ```
 
@@ -34,7 +34,7 @@ docker compose down -v
 Codex app and Codex CLI share MCP settings. First expose the access key in your shell.
 
 ```bash
-export MEMENTO_ACCESS_KEY='YOUR_MEMENTO_ACCESS_KEY'
+export ENGRAM_ACCESS_KEY='YOUR_ENGRAM_ACCESS_KEY'
 ```
 
 Then add the server to `~/.codex/config.toml`.
@@ -42,8 +42,14 @@ Then add the server to `~/.codex/config.toml`.
 ```toml
 [mcp_servers.engram-codex]
 url = "http://localhost:57332/mcp"
-bearer_token_env_var = "MEMENTO_ACCESS_KEY"
+bearer_token_env_var = "ENGRAM_ACCESS_KEY"
 ```
+
+## Breaking Change Notice
+
+- `MEMENTO_ACCESS_KEY` and `memento-access-key` no longer work.
+- Existing operators must update shell environment variables, Codex config, reverse-proxy header forwarding, and deployment scripts to `ENGRAM_ACCESS_KEY` and `engram-access-key`.
+- If Redis is enabled, the embedding queue key is now `engram:embedding_queue`; previously queued items under `memento:embedding_queue` are not consumed automatically after the upgrade.
 
 If you want the server enabled only for a trusted project, place the same entry in `.codex/config.toml` inside that repository instead of the user-level config.
 
@@ -101,7 +107,7 @@ npm run backfill:embeddings
 
 ```bash
 cp .env.example .env
-# Edit .env: set DATABASE_URL, MEMENTO_ACCESS_KEY, and other required values
+# Edit .env: set DATABASE_URL, ENGRAM_ACCESS_KEY, and other required values
 ```
 
 - `DATABASE_URL` is the canonical DSN for `npm run db:init` and maintenance scripts.

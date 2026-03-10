@@ -6,7 +6,7 @@
 
 ```bash
 cp .env.example .env
-# .env에서 MEMENTO_ACCESS_KEY와 PostgreSQL 계정을 원하는 값으로 수정
+# .env에서 ENGRAM_ACCESS_KEY와 PostgreSQL 계정을 원하는 값으로 수정
 docker compose up --build
 ```
 
@@ -34,7 +34,7 @@ docker compose down -v
 Codex app과 CLI는 MCP 설정을 공유한다. 먼저 셸에 접근 키를 노출한다.
 
 ```bash
-export MEMENTO_ACCESS_KEY='YOUR_MEMENTO_ACCESS_KEY'
+export ENGRAM_ACCESS_KEY='YOUR_ENGRAM_ACCESS_KEY'
 ```
 
 그 다음 `~/.codex/config.toml`에 아래를 추가한다.
@@ -42,8 +42,14 @@ export MEMENTO_ACCESS_KEY='YOUR_MEMENTO_ACCESS_KEY'
 ```toml
 [mcp_servers.engram-codex]
 url = "http://localhost:57332/mcp"
-bearer_token_env_var = "MEMENTO_ACCESS_KEY"
+bearer_token_env_var = "ENGRAM_ACCESS_KEY"
 ```
+
+## 브레이킹 체인지 주의
+
+- 기존 `MEMENTO_ACCESS_KEY`와 `memento-access-key`는 더 이상 동작하지 않는다.
+- 기존 운영 환경은 셸 환경변수, Codex 설정, reverse proxy 헤더 전달, 배포 스크립트를 `ENGRAM_ACCESS_KEY`와 `engram-access-key` 기준으로 업데이트해야 한다.
+- Redis를 쓰고 있었다면 임베딩 큐 키가 `engram:embedding_queue`로 바뀌므로, 업그레이드 후에는 예전 `memento:embedding_queue` 적재분이 자동 소비되지 않는다.
 
 프로젝트별로만 켜고 싶다면 신뢰된 저장소의 `.codex/config.toml`에서 같은 서버를 override해도 된다. Codex app과 CLI는 이 MCP 설정을 함께 사용한다.
 
@@ -105,7 +111,7 @@ npm run backfill:embeddings
 
 ```bash
 cp .env.example .env
-# .env 파일에서 DATABASE_URL, MEMENTO_ACCESS_KEY 등 필수 값 입력
+# .env 파일에서 DATABASE_URL, ENGRAM_ACCESS_KEY 등 필수 값 입력
 ```
 
 - `DATABASE_URL`은 `npm run db:init`과 maintenance 스크립트의 canonical DSN이다.
