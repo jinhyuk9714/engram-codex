@@ -1,14 +1,20 @@
 import { describe, test } from "node:test";
 import assert from "node:assert/strict";
 import { execFile as execFileCb } from "node:child_process";
+import fs from "node:fs";
 import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 const execFile = promisify(execFileCb);
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT_DIR = path.resolve(__dirname, "../..");
 const moduleUrl = pathToFileURL(
-  path.resolve("/Users/sungjh/Projects/engram-codex/.worktrees/codex-reliability-hardening/lib/memory/NLIClassifier.js")
+  path.join(ROOT_DIR, "lib/memory/NLIClassifier.js")
 ).href;
+const nodeBin = fs.existsSync(process.execPath) ? process.execPath : "node";
 
 async function importFreshNliModule(suffix) {
   return import(`${moduleUrl}?test=${suffix}`);
@@ -95,8 +101,8 @@ describe("NLI lifecycle", () => {
       console.log(JSON.stringify(result));
     `;
 
-    const { stdout } = await execFile(process.execPath, ["--input-type=module", "-e", script], {
-      cwd: "/Users/sungjh/Projects/engram-codex/.worktrees/codex-reliability-hardening",
+    const { stdout } = await execFile(nodeBin, ["--input-type=module", "-e", script], {
+      cwd: ROOT_DIR,
       env: {
         ...process.env,
         LOG_DIR: "tmp/test-logs",
