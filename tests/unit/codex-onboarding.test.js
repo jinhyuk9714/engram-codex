@@ -13,11 +13,18 @@ describe("Codex-focused onboarding", () => {
     const userPromptSubmit = new RegExp("User" + "Prompt" + "Submit");
 
     assert.equal(result.serverInfo.name, "engram-codex-server");
+    assert.equal(result.capabilities.tasks, undefined);
     assert.match(result.instructions, /Engram Codex Server/);
     assert.match(result.instructions, /AGENTS\.md/);
+    assert.match(result.instructions, /Advertised MCP capabilities: tools, prompts, resources/);
     assert.match(result.instructions, /context/);
     assert.match(result.instructions, /recall/);
     assert.match(result.instructions, /reflect/);
+    assert.match(result.serverInfo.description, /Advertised MCP capabilities: tools, prompts, resources/);
+    assert.doesNotMatch(result.serverInfo.description, /Tasks abstraction/i);
+    assert.doesNotMatch(result.serverInfo.description, /long-running operation support/i);
+    assert.doesNotMatch(result.instructions, /Tasks abstraction/i);
+    assert.doesNotMatch(result.instructions, /long-running operation support/i);
     assert.doesNotMatch(result.instructions, claudeCode);
     assert.doesNotMatch(result.instructions, claudeMd);
     assert.doesNotMatch(result.instructions, sessionStart);

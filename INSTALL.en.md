@@ -7,6 +7,7 @@ bash setup.sh
 ```
 
 Guides you through `.env` creation, `npm install`, and DB schema setup step by step.
+The script now performs preflight checks for Node.js, `npm`, and `python3`, and warns early if `psql` is unavailable.
 
 ---
 
@@ -33,15 +34,23 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 Verify with `\dx` in psql. The HNSW index requires pgvector 0.5.0 or later.
 
-**Fresh install:**
+**Fresh install:** apply the base schema snapshot, then run the full deterministic migration sequence so a new database matches the latest runtime expectations.
 
 ```bash
 psql -U $POSTGRES_USER -d $POSTGRES_DB -f lib/memory/memory-schema.sql
+psql $DATABASE_URL -f lib/memory/migration-001-temporal.sql
+psql $DATABASE_URL -f lib/memory/migration-002-decay.sql
+psql $DATABASE_URL -f lib/memory/migration-003-api-keys.sql
+psql $DATABASE_URL -f lib/memory/migration-004-key-isolation.sql
+psql $DATABASE_URL -f lib/memory/migration-005-gc-columns.sql
+psql $DATABASE_URL -f lib/memory/migration-006-superseded-by-constraint.sql
+psql $DATABASE_URL -f lib/memory/migration-007-link-weight.sql
+psql $DATABASE_URL -f lib/memory/migration-008-morpheme-dict.sql
 ```
 
 ## Upgrade (Existing Installation)
 
-Run migrations in order:
+Run the migration sequence only:
 
 ```bash
 # Temporal schema: adds valid_from, valid_to, superseded_by columns and indexes
@@ -61,6 +70,12 @@ psql $DATABASE_URL -f lib/memory/migration-005-gc-columns.sql
 
 # fragment_links constraint: adds superseded_by to relation_type CHECK
 psql $DATABASE_URL -f lib/memory/migration-006-superseded-by-constraint.sql
+
+# link metadata: adds link weight support
+psql $DATABASE_URL -f lib/memory/migration-007-link-weight.sql
+
+# morpheme dictionary: adds fallback dictionary tables
+psql $DATABASE_URL -f lib/memory/migration-008-morpheme-dict.sql
 ```
 
 > **Upgrading from v1.1.0 or earlier**: If migration-006 is not applied, any operation that creates a `superseded_by` link — `amend`, `memory_consolidate`, and automatic relationship generation in GraphLinker — will fail with a DB constraint error. This migration is mandatory when upgrading an existing database.
@@ -86,11 +101,26 @@ cp .env.example .env
 
 For the full list of environment variables, see [README.en.md — Configuration](README.en.md#10-configuration).
 
+If you need an operational rollback from the in-process ONNX classifier, add `NLI_DISABLE_INPROCESS=true` to `.env`. This only applies when `NLI_SERVICE_URL` is unset; the normal default remains `false`.
+
 ## Starting the Server
 
 ```bash
 node server.js
 ```
+
+## Verifying the Server
+
+```bash
+curl -i http://localhost:57332/health
+curl -i http://localhost:57332/ready
+curl -i http://localhost:57332/metrics
+```
+
+- `/health` is the liveness probe. It returns `200` as long as the process can serve requests.
+- `/ready` is the readiness probe. It returns `200` only when PostgreSQL responds successfully.
+- When `REDIS_ENABLED=false`, Redis is reported as `disabled` and does not fail readiness.
+- `NLI_DISABLE_INPROCESS=true` can be used as a shutdown-stability fallback to skip in-process NLI preload and inference.
 
 ## Tests
 
@@ -142,7 +172,7 @@ The server's `instructions` field nudges Codex toward `context`, `recall`, and `
 
 | Version | Notable Additions |
 |---------|------------------|
-| `2025-11-25` | Tasks abstraction, long-running operation support |
+| `2025-11-25` | Latest negotiated revision; current `initialize` advertises tools, prompts, and resources |
 | `2025-06-18` | Structured tool output, server-driven interaction |
 | `2025-03-26` | OAuth 2.1, Streamable HTTP transport |
 | `2024-11-05` | Initial release; Legacy SSE transport |

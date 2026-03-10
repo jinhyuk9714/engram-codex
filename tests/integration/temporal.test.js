@@ -10,15 +10,39 @@
 
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import pg from "pg";
 
 const pool = new pg.Pool({
   connectionString: process.env.DATABASE_URL
 });
 const S = "agent_memory";
+const SQL_FILES = [
+  "../../lib/memory/memory-schema.sql",
+  "../../lib/memory/migration-001-temporal.sql",
+  "../../lib/memory/migration-002-decay.sql",
+  "../../lib/memory/migration-003-api-keys.sql",
+  "../../lib/memory/migration-004-key-isolation.sql",
+  "../../lib/memory/migration-005-gc-columns.sql",
+  "../../lib/memory/migration-006-superseded-by-constraint.sql",
+  "../../lib/memory/migration-007-link-weight.sql",
+  "../../lib/memory/migration-008-morpheme-dict.sql"
+].map(file => new URL(file, import.meta.url));
+
+async function applySqlFile(fileUrl) {
+  const sql = await readFile(fileUrl, "utf8");
+  await pool.query(sql);
+}
 
 describe("Point-in-time 쿼리", () => {
   before(async () => {
+    await pool.query("CREATE EXTENSION IF NOT EXISTS vector");
+    await pool.query(`DROP SCHEMA IF EXISTS ${S} CASCADE`);
+
+    for (const file of SQL_FILES) {
+      await applySqlFile(file);
+    }
+
     /** RLS: default 에이전트 컨텍스트 설정 */
     await pool.query(`SET app.current_agent_id = 'default'`);
 
@@ -37,6 +61,45 @@ describe("Point-in-time 쿼리", () => {
            '2026-02-01'::timestamptz, NULL, 'default')
       ON CONFLICT (id) DO NOTHING
     `);
+  });
+
+  test("fresh bootstrap installs latest schema objects", async () => {
+    const { rows: columns } = await pool.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = $1
+        AND table_name = 'fragments'
+        AND column_name = ANY($2::text[])
+    `, [S, ["valid_from", "valid_to", "last_decay_at", "key_id"]]);
+    const columnNames = new Set(columns.map(row => row.column_name));
+
+    assert.deepStrictEqual(
+      [...columnNames].sort(),
+      ["key_id", "last_decay_at", "valid_from", "valid_to"]
+    );
+
+    const { rows: objects } = await pool.query(`
+      SELECT to_regclass($1) AS api_keys,
+             to_regclass($2) AS api_key_usage,
+             to_regclass($3) AS morpheme_dict
+    `, [
+      `${S}.api_keys`,
+      `${S}.api_key_usage`,
+      `${S}.morpheme_dict`
+    ]);
+
+    assert.ok(objects[0].api_keys, "api_keys table should exist");
+    assert.ok(objects[0].api_key_usage, "api_key_usage table should exist");
+    assert.ok(objects[0].morpheme_dict, "morpheme_dict table should exist");
+
+    const { rows: linkColumns } = await pool.query(`
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = $1
+        AND table_name = 'fragment_links'
+        AND column_name = 'weight'
+    `, [S]);
+    assert.strictEqual(linkColumns.length, 1);
   });
 
   test("2026-01-15 시점에는 v1만 반환", async () => {
