@@ -16,6 +16,12 @@ Codex 작업은 여러 세션에 걸쳐 이어지는 경우가 많습니다. 긴
 - **Automatic maintenance**: decay, TTL 이동, 중복 병합, 모순 탐지, 고아 링크 정리, 세션 reflect 정리를 수행합니다.
 - **Codex-first operations**: Docker Compose quickstart, `.env` 자동 로드, `/health`와 `/ready` probe를 제공합니다.
 
+## 아키텍처
+
+<p align="center">
+  <img src="assets/images/engram_architecture.svg" alt="Engram Codex Architecture" width="100%" />
+</p>
+
 ## MCP 도구
 
 | 도구 | 역할 |
